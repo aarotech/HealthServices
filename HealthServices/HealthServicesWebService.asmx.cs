@@ -106,7 +106,7 @@ namespace HealthServices
                 foreach (JToken child in children.FirstOrDefault())
                 {
                     string value = child["author"]["displayName"].ToString();
-                    if(!authorList.Contains(value))
+                    if (!authorList.Contains(value))
                     {
                         authorList.Add(value);
                     }
@@ -152,15 +152,98 @@ namespace HealthServices
         }
 
         [WebMethod]
-        public string DisplayProcessTemplate(string collectionName, string personalAccessToken)
+        public List<Project> WorkItemTypeCategoriesByProject(string collectionName, string personalAccessToken)
         {
-            Task<string> task = Task.Run<string>(async () => await CheckProcessTemplate(collectionName, personalAccessToken));
-            string httpResponseBody = task.Result;
+            List<Project> workItemTypeCategoriesByProject = new List<Project>();
 
-            return httpResponseBody;
+            List<string> projectList = ListProjects(collectionName, personalAccessToken);
+            foreach (string projectName in projectList)
+            {
+                List<string> workItemTypeCategoryList = ListWorkItemTypeCategories(collectionName, projectName, personalAccessToken);
+                Project currentProject = new Project(workItemTypeCategoryList, projectName);
+                workItemTypeCategoriesByProject.Add(currentProject);
+            }
+
+            return workItemTypeCategoriesByProject;
         }
 
-        public static async Task<string> CheckProcessTemplate(string collectionName, string personalAccessToken)
+        [WebMethod]
+        public List<WorkItemType> ListStatesByWorkItemType(string collectionName, string projectName, string personalAccessToken)
+        {
+            List<WorkItemType> statesByWorkItemTypeCategory = new List<WorkItemType>();
+
+            List<string> workItemTypeCategoryList = ListWorkItemTypeCategories(collectionName, projectName, personalAccessToken);
+            foreach (string workItemTypeName in workItemTypeCategoryList)
+            {
+                List<string> workItemStateList = ListWorkItemStates(collectionName, projectName, workItemTypeName, personalAccessToken);
+                WorkItemType currentWorkItemType = new WorkItemType(workItemTypeName, workItemStateList);
+                statesByWorkItemTypeCategory.Add(currentWorkItemType);
+            }
+
+            return statesByWorkItemTypeCategory;
+        }
+
+        [WebMethod]
+        public List<string> ListWorkItemStates(string collectionName, string projectName, string workItemCategory, string personalAccessToken)
+        {
+            Task<string> task = Task.Run<string>(async () => await GetWorkItemStates(collectionName, projectName, workItemCategory, personalAccessToken));
+            string httpResponseBody = task.Result;
+
+            List<string> workItemStateList = new List<string>();
+            try
+            {
+                JObject details = JObject.Parse(httpResponseBody);
+                JToken root = details.Root.Last();
+                JEnumerable<JToken> children = root.Children();
+                foreach (JToken child in children.FirstOrDefault())
+                {
+                    string value = child["name"].ToString();
+                    if (!workItemStateList.Contains(value))
+                    {
+                        workItemStateList.Add(value);
+                    }
+                }
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+
+            return workItemStateList;
+        }
+
+        [WebMethod]
+        public List<string> ListWorkItemTypeCategories(string collectionName, string projectName, string personalAccessToken)
+        {
+            Task<string> task = Task.Run<string>(async () => await GetWorkItemTypeCategories(collectionName, projectName, personalAccessToken));
+            string httpResponseBody = task.Result;
+
+            List<string> workItemTypeCategoryList = new List<string>();
+            try
+            {
+                JObject details = JObject.Parse(httpResponseBody);
+                JToken root = details.Root.Last();
+                JEnumerable<JToken> children = root.Children();
+                foreach (JToken child in children.FirstOrDefault())
+                {
+                    string value = child["name"].ToString().Replace(" Category", "");
+                    if (!workItemTypeCategoryList.Contains(value))
+                    {
+                        workItemTypeCategoryList.Add(value);
+                    }
+                }
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+
+            return workItemTypeCategoryList;
+        }
+
+        public static async Task<string> GetProjectProperties(string collectionName, string projectUUID, string personalAccessToken)
         {
             string responseBody = "";
             try
@@ -177,7 +260,79 @@ namespace HealthServices
                                 string.Format("{0}:{1}", "", personalAccessToken))));
 
                     using (HttpResponseMessage response = await client.GetAsync(
-                                "http://tfs.interiorhealth.ca:8080/tfs/" + collectionName + "/_apis/work/processadmin/processes/checktemplateexistence/"))
+                                "http://tfs.interiorhealth.ca:8080/tfs/" + collectionName + "/_apis/projects/" + projectUUID + "/properties"))
+                    {
+                        response.EnsureSuccessStatusCode();
+                        responseBody = await response.Content.ReadAsStringAsync();
+                        Console.WriteLine(responseBody);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+            return responseBody;
+        }
+
+        public static async Task<string> GetWorkItemStates(string collectionName, string projectName, string workItemTypeCategory, string personalAccessToken)
+        {
+            if (!string.IsNullOrWhiteSpace(projectName))
+            {
+                collectionName += "/" + projectName;
+            }
+            string responseBody = "";
+            try
+            {
+
+                using (HttpClient client = new HttpClient())
+                {
+                    client.DefaultRequestHeaders.Accept.Add(
+                        new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
+                        Convert.ToBase64String(
+                            System.Text.ASCIIEncoding.ASCII.GetBytes(
+                                string.Format("{0}:{1}", "", personalAccessToken))));
+
+                    using (HttpResponseMessage response = await client.GetAsync(
+                                "http://tfs.interiorhealth.ca:8080/tfs/" + collectionName + "/_apis/wit/workitemtypes/" + workItemTypeCategory + "/states/"))
+                    {
+                        response.EnsureSuccessStatusCode();
+                        responseBody = await response.Content.ReadAsStringAsync();
+                        Console.WriteLine(responseBody);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+            return responseBody;
+        }
+
+        public static async Task<string> GetWorkItemTypeCategories(string collectionName, string projectName, string personalAccessToken)
+        {
+            if (!string.IsNullOrWhiteSpace(projectName))
+            {
+                collectionName += "/" + projectName;
+            }
+            string responseBody = "";
+            try
+            {
+
+                using (HttpClient client = new HttpClient())
+                {
+                    client.DefaultRequestHeaders.Accept.Add(
+                        new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
+                        Convert.ToBase64String(
+                            System.Text.ASCIIEncoding.ASCII.GetBytes(
+                                string.Format("{0}:{1}", "", personalAccessToken))));
+
+                    using (HttpResponseMessage response = await client.GetAsync(
+                                "http://tfs.interiorhealth.ca:8080/tfs/" + collectionName + "/_apis/wit/workitemtypecategories/"))
                     {
                         response.EnsureSuccessStatusCode();
                         responseBody = await response.Content.ReadAsStringAsync();
@@ -226,7 +381,7 @@ namespace HealthServices
 
         public static async Task<string> GetChangeSets(string collectionName, string projectName, string personalAccessToken)
         {
-            if(!string.IsNullOrWhiteSpace(projectName))
+            if (!string.IsNullOrWhiteSpace(projectName))
             {
                 collectionName += "/" + projectName;
             }
@@ -260,21 +415,42 @@ namespace HealthServices
             return responseBody;
         }
 
+        public class WorkItemType
+        {
+            public string category;
+            public List<string> states;
+
+            public WorkItemType()
+            {
+                category = "";
+                states = new List<string>(); ;
+            }
+
+            public WorkItemType(string newName = "", List<string> newStateList = null)
+            {
+                category = newName;
+                states = newStateList;
+            }
+        }
+
         public class Project
         {
             public string name;
             public List<string> contributors;
+            public List<string> workItemTypeCatagories;
 
             public Project()
             {
                 name = "";
                 contributors = new List<string>(); ;
+                workItemTypeCatagories = new List<string>(); ;
             }
 
-            public Project(List<string> newContributorList, string newName = "")
+            public Project(List<string> newContributorList = null, string newName = "", List<string> newWorkItemTypeCatagories = null)
             {
                 name = newName;
                 contributors = newContributorList;
+                workItemTypeCatagories = newWorkItemTypeCatagories;
             }
         }
     }
