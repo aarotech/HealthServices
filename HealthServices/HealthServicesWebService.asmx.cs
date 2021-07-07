@@ -53,10 +53,10 @@ namespace HealthServices
         {
             List<Project> authorListByProject = new List<Project>();
 
-            List<string> projectList = ListProjects(collectionName, personalAccessToken);
+            List<string> projectList = ListProjectNames(collectionName, personalAccessToken);
             foreach (string projectName in projectList)
             {
-                List<string> changeSetList = ListChangeSets(collectionName, projectName, personalAccessToken);
+                List<string> changeSetList = ListAuthors(collectionName, projectName, personalAccessToken);
                 Project currentProject = new Project(changeSetList, projectName);
                 authorListByProject.Add(currentProject);
             }
@@ -69,7 +69,7 @@ namespace HealthServices
         {
             List<string> authorListByProject = new List<string>();
 
-            List<string> projectList = ListProjects(collectionName, personalAccessToken);
+            List<string> projectList = ListProjectNames(collectionName, personalAccessToken);
             foreach (string projectName in projectList)
             {
                 string authorList = ListChangeSetsPipeDelimited(collectionName, projectName, personalAccessToken);
@@ -82,7 +82,7 @@ namespace HealthServices
         [WebMethod]
         public string ListChangeSetsPipeDelimited(string collectionName, string projectName, string personalAccessToken)
         {
-            List<string> authorList = ListChangeSets(collectionName, projectName, personalAccessToken);
+            List<string> authorList = ListAuthors(collectionName, projectName, personalAccessToken);
             string httpResponse = "";
             foreach (string authorName in authorList)
             {
@@ -92,7 +92,7 @@ namespace HealthServices
         }
 
         [WebMethod]
-        public List<string> ListChangeSets(string collectionName, string projectName, string personalAccessToken)
+        public List<string> ListAuthors(string collectionName, string projectName, string personalAccessToken)
         {
             Task<string> task = Task.Run<string>(async () => await GetChangeSets(collectionName, projectName, personalAccessToken));
             string httpResponseBody = task.Result;
@@ -122,7 +122,7 @@ namespace HealthServices
         }
 
         [WebMethod]
-        public List<string> ListProjects(string collectionName, string personalAccessToken)
+        public List<string> ListProjectNames(string collectionName, string personalAccessToken)
         {
             Task<string> task = Task.Run<string>(async () => await GetProjects(collectionName, personalAccessToken));
             string httpResponseBody = task.Result;
@@ -152,11 +152,27 @@ namespace HealthServices
         }
 
         [WebMethod]
+        public List<Project> ProjectDetailsByProjectForCollection(string collectionName, string personalAccessToken)
+        {
+            List<Project> projectDetailsList = new List<Project>();
+            List<string> projectList = ListProjectNames(collectionName, personalAccessToken);
+            foreach (string projectNameString in projectList)
+            {
+                List<WorkItemType> workItemTypeCategories = ListStatesByWorkItemType(collectionName, projectNameString, personalAccessToken);
+                List<string> contributorList = ListAuthors(collectionName, projectNameString, personalAccessToken);
+                Project currentProject = new Project(contributorList, workItemTypeCategories, projectNameString);
+                projectDetailsList.Add(currentProject);
+            }
+
+            return projectDetailsList;
+        }
+
+        [WebMethod]
         public List<Project> WorkItemTypeCategoriesByProject(string collectionName, string personalAccessToken)
         {
             List<Project> workItemTypeCategoriesByProject = new List<Project>();
 
-            List<string> projectList = ListProjects(collectionName, personalAccessToken);
+            List<string> projectList = ListProjectNames(collectionName, personalAccessToken);
             foreach (string projectName in projectList)
             {
                 List<string> workItemTypeCategoryList = ListWorkItemTypeCategories(collectionName, projectName, personalAccessToken);
@@ -181,6 +197,23 @@ namespace HealthServices
             }
 
             return statesByWorkItemTypeCategory;
+        }
+
+        [WebMethod]
+        public List<Project> ListWorkItemStatesByProjectForCategory(string collectionName, string workItemCategory, string personalAccessToken)
+        {
+            List<Project> workItemStates = new List<Project>();
+            List<string> projectNames = ListProjectNames(collectionName, personalAccessToken);
+            foreach (string projectName in projectNames)
+            {
+                WorkItemType workItemType = new WorkItemType(workItemCategory, ListWorkItemStates(collectionName, projectName, workItemCategory, personalAccessToken));
+                List<WorkItemType> workItemTypes = new List<WorkItemType>();
+                workItemTypes.Add(workItemType);
+                Project currentProject = new Project(null, workItemTypes, projectName);
+                workItemStates.Add(currentProject);
+            }
+
+            return workItemStates;
         }
 
         [WebMethod]
@@ -438,6 +471,7 @@ namespace HealthServices
             public string name;
             public List<string> contributors;
             public List<string> workItemTypeCatagories;
+            public List<WorkItemType> workItemTypes;
 
             public Project()
             {
@@ -451,6 +485,13 @@ namespace HealthServices
                 name = newName;
                 contributors = newContributorList;
                 workItemTypeCatagories = newWorkItemTypeCatagories;
+            }
+
+            public Project(List<string> newContributorList = null, List<WorkItemType> newWorkItemTypes = null, string newName = "")
+            {
+                name = newName;
+                contributors = newContributorList;
+                workItemTypes = newWorkItemTypes;
             }
         }
     }
